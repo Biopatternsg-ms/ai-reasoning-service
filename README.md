@@ -1,11 +1,37 @@
 # ai-reasoning-service
 
-Biomedical entity alignment, disambiguation, and AI reasoning microservice for the **BioPatternsG** platform.
+Biomedical entity alignment, disambiguation, and AI reasoning microservice for the **BioPatternsG** platform, built using **Hexagonal Architecture (Ports and Adapters / DDD)**.
 
 ---
 
-## 1. Features
+## 1. Architecture Overview
 
+The microservice strictly adheres to Hexagonal Architecture divided into three main layers:
+
+```text
+src/
+├── domain/                          # 🟢 Pure Business Core (Zero external dependencies)
+│   ├── models/                      # Domain entities (AlignedItem, AlignmentProposal, PreAlignment)
+│   ├── ports/                       # Outbound Driven Ports (PubMedDataPort, LLMReasoningPort)
+│   └── exceptions/                  # Domain exceptions (DomainException, AlignmentException)
+│
+├── application/                     # 🟡 Application Layer (Use Cases & Heuristics)
+│   ├── use_cases/                   # Inbound Driving Ports (GenerateAlignmentProposalUseCase)
+│   │   └── impl/                    # Concrete Use Case implementations
+│   └── prompts/                     # Biomedical micro-prompts & system instructions
+│
+└── infrastructure/                  # 🔴 Infrastructure Layer (Technical Adapters & Delivery)
+    ├── config/                      # Pydantic Settings (.env)
+    ├── container.py                 # Dependency Injection Container (Wiring)
+    ├── delivery/rest/               # Driving Inbound HTTP Adapters (FastAPI Routers & DTOs)
+    └── adapters/                    # Driven Outbound Adapters (PubMedHttpAdapter, GeminiAdapter, OllamaAdapter)
+```
+
+---
+
+## 2. Features
+
+* **Hexagonal / Clean Architecture**: Total decoupling between biological domain logic, frameworks, and external APIs.
 * **AI-Assisted Entity Alignment**: Resolves unaligned entities (`noAligned`) and disambiguates candidate alternatives (`alignedAs`).
 * **Hybrid LLM Support (Provider-Agnostic)**:
   * **Cloud Mode (Active)**: Powered by **Google Gemini (1.5 Flash)** for ultra-fast, high-context inferences without requiring local GPUs.
@@ -15,7 +41,7 @@ Biomedical entity alignment, disambiguation, and AI reasoning microservice for t
 
 ---
 
-## 2. Main Endpoints
+## 3. Main Endpoints
 
 All endpoints use the `/ai-reasoning/...` prefix (without `/api` prefix for seamless API Gateway compatibility):
 
@@ -54,7 +80,7 @@ All endpoints use the `/ai-reasoning/...` prefix (without `/api` prefix for seam
 
 ---
 
-## 3. Configuration & Environment Variables
+## 4. Configuration & Environment Variables
 
 Copy `.env.example` to `.env` and set your configuration variables:
 
@@ -73,7 +99,7 @@ cp .env.example .env
 
 ---
 
-## 4. Running with Docker
+## 5. Running with Docker
 
 ### Build the Docker image:
 ```bash
@@ -92,16 +118,18 @@ docker run -d \
 
 ---
 
-## 5. Local Development Setup
+## 6. Local Development & Testing
 
 ```bash
-# Create and activate virtual environment
-python3 -m venv venv
+# Activate virtual environment
 source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the server with hot-reload
-uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+# Run unit and integration tests
+pytest tests/ -v
+
+# Run the server with hot-reload (limiting watch to src directory)
+uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir src
 ```
