@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -14,3 +14,4 @@ class AlignedItem(BaseModel):
     aligned: str = Field(..., description="Aligned canonical symbol (or fallback)")
     status: AlignmentStatus = Field(..., description="Classification status: DIRECT_MATCH, RESOLVED_BY_AI, or UNRESOLVED")
     reason: Optional[str] = Field(None, description="Human-readable biological justification and criterion applied")
+    pubmed_ids: List[str] = Field(default_factory=list, description="List of supporting PubMed IDs, if evidenced in publications")

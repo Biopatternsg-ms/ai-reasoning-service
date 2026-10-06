@@ -43,3 +43,78 @@ class PubMedHttpAdapter(PubMedDataPort):
             except httpx.RequestError as e:
                 logger.error(f"Connection error with pubmed-integration ({url}): {str(e)}")
                 raise
+
+    async def get_kb_events_by_term(self, pipeline_id: str, term: str, user_id: str) -> list:
+        """
+        Queries knowledge base events involving the term from pubmed-integration:
+        GET /pubmed/kb-events/{pipelineId}/by-term/{term}
+        """
+        import urllib.parse
+        encoded_term = urllib.parse.quote(term.strip())
+        url = f"{self.base_url}/pubmed/kb-events/{pipeline_id}/by-term/{encoded_term}"
+        logger.info(f"Querying kb-events for term '{term}' at: {url}")
+
+        headers = {"x-user-id": user_id}
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(url, headers=headers)
+                if response.status_code == 404:
+                    return []
+                response.raise_for_status()
+                data = response.json()
+                from src.domain.models.evidence import KbEventDomain
+                from src.infrastructure.adapters.pubmed.dtos.pubmed_response_dto import KbEventResponseDTO
+                events = [KbEventResponseDTO.model_validate(item) for item in data]
+                return [
+                    KbEventDomain(
+                        first=e.first,
+                        relation=e.relation,
+                        second=e.second,
+                        pubmed_ids=e.pubmed_ids
+                    )
+                    for e in events
+                ]
+            except httpx.HTTPStatusError as e:
+                logger.error(f"HTTP error {e.response.status_code} querying kb-events for '{term}': {e.response.text}")
+                return []
+            except Exception as e:
+                logger.warning(f"Failed to fetch kb-events for term '{term}': {str(e)}")
+                return []
+
+    async def get_publications_by_pmids(self, pmids: list, user_id: str) -> list:
+        """
+        Queries publication abstracts for a list of PMIDs from pubmed-integration:
+        POST /pubmed/publications/by-pmids
+        """
+        if not pmids:
+            return []
+
+        url = f"{self.base_url}/pubmed/publications/by-pmids"
+        logger.info(f"Querying publications for {len(pmids)} PMIDs at: {url}")
+
+        headers = {"x-user-id": user_id}
+        payload = {"pmids": pmids}
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                from src.domain.models.evidence import PublicationEvidence
+                from src.infrastructure.adapters.pubmed.dtos.pubmed_response_dto import PublicationResponseDTO
+                pubs = [PublicationResponseDTO.model_validate(item) for item in data]
+                return [
+                    PublicationEvidence(
+                        pmid=p.pmid,
+                        title=p.title,
+                        text=p.text
+                    )
+                    for p in pubs
+                ]
+            except httpx.HTTPStatusError as e:
+                logger.error(f"HTTP error {e.response.status_code} querying publications: {e.response.text}")
+                return []
+            except Exception as e:
+                logger.warning(f"Failed to fetch publications by pmids: {str(e)}")
+                return []

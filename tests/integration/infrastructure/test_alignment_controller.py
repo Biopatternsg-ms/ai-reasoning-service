@@ -41,7 +41,8 @@ def test_successful_alignment_proposal_flow(client, monkeypatch):
                 current="TATA",
                 aligned="TBP",
                 status=AlignmentStatus.RESOLVED_BY_AI,
-                reason="TATA-binding protein [Criterion: canonical_gene_mapping]"
+                reason="TATA-binding protein [Criterion: canonical_gene_mapping]",
+                pubmed_ids=["10523821"]
             )
         ]
     )
@@ -59,6 +60,8 @@ def test_successful_alignment_proposal_flow(client, monkeypatch):
     assert len(data["objects"]) == 2
     assert data["objects"][0]["current"] == "SST"
     assert data["objects"][0]["status"] == "DIRECT_MATCH"
+    assert data["objects"][0]["pubmedIds"] == []
     assert data["objects"][1]["current"] == "TATA"
     assert data["objects"][1]["aligned"] == "TBP"
     assert data["objects"][1]["status"] == "RESOLVED_BY_AI"
+    assert data["objects"][1]["pubmedIds"] == ["10523821"]

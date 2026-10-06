@@ -9,6 +9,10 @@ class AlignedItemDTO(BaseModel):
     aligned: str = Field(..., description="Aligned canonical symbol (or fallback)")
     status: str = Field(..., description="Classification status: DIRECT_MATCH, RESOLVED_BY_AI, UNRESOLVED")
     reason: Optional[str] = Field(None, description="Biological rationale and applied criterion")
+    pubmed_ids: List[str] = Field(default_factory=list, alias="pubmedIds", description="Supporting PubMed IDs if evidenced in publications")
+
+    class Config:
+        populate_by_name = True
 
     @classmethod
     def from_domain(cls, item: DomainAlignedItem) -> "AlignedItemDTO":
@@ -16,7 +20,8 @@ class AlignedItemDTO(BaseModel):
             current=item.current,
             aligned=item.aligned,
             status=item.status.value if hasattr(item.status, "value") else str(item.status),
-            reason=item.reason or ""
+            reason=item.reason or "",
+            pubmed_ids=item.pubmed_ids or []
         )
 
 
