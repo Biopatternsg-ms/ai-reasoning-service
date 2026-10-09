@@ -299,7 +299,7 @@ class GenerateAlignmentProposalUseCaseImpl(GenerateAlignmentProposalUseCase):
     ) -> List[Dict[str, any]]:
         """
         Retrieves knowledge base events and publication abstracts for unaligned entities.
-        Limits to top 3 PubMed IDs per entity to optimize context window and latency.
+        Includes all unique PubMed IDs associated with the term's events without truncation.
         """
         if not entities:
             return []
@@ -314,7 +314,7 @@ class GenerateAlignmentProposalUseCaseImpl(GenerateAlignmentProposalUseCase):
                     user_id=user_id
                 )
 
-                # 2. Extract unique PubMed IDs (limit to top 3)
+                # 2. Extract all unique PubMed IDs from events
                 collected_pmids = []
                 event_summaries = []
                 for ev in events:
@@ -324,25 +324,23 @@ class GenerateAlignmentProposalUseCaseImpl(GenerateAlignmentProposalUseCase):
                         if clean_pmid and clean_pmid not in collected_pmids:
                             collected_pmids.append(clean_pmid)
 
-                top_pmids = collected_pmids[:3]
-
-                # 3. Fetch publications (titles and abstracts)
+                # 3. Fetch all publications (titles and abstracts)
                 pubs = []
-                if top_pmids:
+                if collected_pmids:
                     pubs = await self.pubmed_port.get_publications_by_pmids(
-                        pmids=top_pmids,
+                        pmids=collected_pmids,
                         user_id=user_id
                     )
 
                 if pubs or event_summaries:
                     literature_list.append({
                         "symbol": term,
-                        "events": event_summaries[:5],
+                        "events": event_summaries,
                         "publications": [
                             {
                                 "pmid": p.pmid,
                                 "title": p.title or "",
-                                "abstractSnippet": (p.text[:400] + "...") if p.text and len(p.text) > 400 else (p.text or "")
+                                "abstractSnippet": p.text or ""
                             }
                             for p in pubs
                         ]

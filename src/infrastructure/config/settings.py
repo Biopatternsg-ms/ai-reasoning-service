@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # LLM Settings
     llm_provider: str = "gemini"  # "gemini", "deepseek", "nvidia", or "ollama"
     gemini_api_key: Optional[str] = None
-    llm_model_name: str = "gemini-1.5-flash"
+    llm_model_name: str = "gemini-3.5-flash-lite"
 
     # DeepSeek Settings
     deepseek_api_key: Optional[str] = None
