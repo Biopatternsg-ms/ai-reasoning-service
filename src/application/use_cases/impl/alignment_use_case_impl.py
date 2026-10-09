@@ -4,9 +4,11 @@ from typing import List, Dict, Set, Tuple, Optional, Any
 from src.application.use_cases.alignment_use_case import GenerateAlignmentProposalUseCase
 from src.domain.ports.pubmed_port import PubMedDataPort
 from src.domain.ports.llm_reasoning_port import LLMReasoningPort
+from src.domain.ports.biological_objects_port import BiologicalObjectsPort
 from src.domain.models.entity import AlignedItem, AlignmentStatus
 from src.domain.models.alignment_proposal import AlignmentProposal
 from src.domain.models.pre_alignment import PipelinePreAlignmentData, AmbiguousEntityItem
+from src.domain.models.biological_object import BiologicalObjectDomain
 from src.domain.exceptions.exceptions import AlignmentException, EntityValidationException
 from src.application.prompts.alignment_prompt import (
     ALIGNMENT_SYSTEM_INSTRUCTION,
@@ -19,23 +21,31 @@ logger = logging.getLogger(__name__)
 class GenerateAlignmentProposalUseCaseImpl(GenerateAlignmentProposalUseCase):
     """
     Concrete implementation of GenerateAlignmentProposalUseCase.
-    Orchestrates the domain workflow using driven ports (PubMedDataPort, LLMReasoningPort).
+    Orchestrates the 3-stage alignment workflow:
+    - Stage 1: Deterministic local matching (Zero LLM Tokens).
+    - Stage 2: BiopatternsG Database matching via search-biological-objects.
+    - Stage 3: AI-Assisted resolution with PubMed literature evidence (LLM).
     """
 
-    def __init__(self, pubmed_port: PubMedDataPort, llm_port: LLMReasoningPort):
+    def __init__(
+        self,
+        pubmed_port: PubMedDataPort,
+        biological_objects_port: BiologicalObjectsPort,
+        llm_port: LLMReasoningPort
+    ):
         self.pubmed_port = pubmed_port
+        self.biological_objects_port = biological_objects_port
         self.llm_port = llm_port
 
     async def execute(self, pipeline_id: str, user_id: str) -> AlignmentProposal:
         """
-        Coordinates the complete alignment proposal pipeline:
+        Coordinates the complete 3-stage alignment proposal pipeline:
         1. Validates inputs.
         2. Queries preliminary alignment data via PubMedDataPort.
-        3. Processes direct matches (zero LLM token cost).
-        4. Identifies entities requiring AI inference.
-        5. Queries LLMReasoningPort with strict scientific heuristics and fallback safety.
-        6. Maps unaligned and ambiguous items.
-        7. Returns the consolidated AlignmentProposal domain aggregate.
+        3. STAGE 1: Processes direct matches (zero LLM token cost).
+        4. STAGE 2: Queries search-biological-objects for ambiguous entities (biopatternsg db match).
+        5. STAGE 3: Queries LLM with literature evidence for remaining ambiguous & unaligned entities.
+        6. Consolidates and returns AlignmentProposal domain aggregate.
         """
         if not pipeline_id or not pipeline_id.strip():
             raise EntityValidationException("Pipeline ID cannot be empty.")
@@ -56,26 +66,34 @@ class GenerateAlignmentProposalUseCaseImpl(GenerateAlignmentProposalUseCase):
 
         # STAGE 1: Deterministic matching (Zero LLM Tokens)
         # Evaluates entities with direct synonym match or already pre-aligned
-        direct_items, ambiguous_to_resolve, processed_symbols = self._process_direct_matches(pre_data)
+        direct_items, pending_ambiguous, processed_symbols = self._process_direct_matches(pre_data)
 
-        # STAGE 2: AI-Assisted Resolution with Literature Evidence & Scientific Justification
+        # STAGE 2: Deterministic search in BiopatternsG knowledge base (search-biological-objects)
+        # Evaluates ambiguous entities against biological objects database
+        db_items, ambiguous_requiring_ai, db_processed_symbols = await self._process_database_matches(
+            ambiguous_entities=pending_ambiguous,
+            user_id=user_id.strip()
+        )
+        processed_symbols.update(db_processed_symbols)
+
+        # STAGE 3: AI-Assisted Resolution with Literature Evidence & Scientific Justification
         # Filter unaligned entities not yet processed
         entities_to_resolve = self._filter_pending_entities(
             no_aligned=pre_data.no_aligned,
             processed_symbols=processed_symbols
         )
 
-        # Fetch literature evidence (abstracts and interaction events) for unaligned entities
+        # Fetch literature evidence (abstracts and interaction events) for pending entities
         literature_evidence = await self._fetch_literature_evidence(
             pipeline_id=pipeline_id.strip(),
             entities=entities_to_resolve,
             user_id=user_id.strip()
         )
 
-        # Query LLM resolutions only for pending entities
+        # Query LLM resolutions only for remaining pending entities
         ai_resolutions = await self._query_llm_resolutions(
             entities_to_resolve=entities_to_resolve,
-            ambiguous_to_resolve=ambiguous_to_resolve,
+            ambiguous_to_resolve=ambiguous_requiring_ai,
             literature_evidence=literature_evidence
         )
 
@@ -87,16 +105,18 @@ class GenerateAlignmentProposalUseCaseImpl(GenerateAlignmentProposalUseCase):
 
         # Map ambiguous entities (aligned_as without direct match) with AI choice + justification
         ambiguous_items = self._map_ambiguous_entities(
-            ambiguous=ambiguous_to_resolve,
+            ambiguous=ambiguous_requiring_ai,
             resolutions=ai_resolutions
         )
 
-        # Consolidate Stage 1 and Stage 2 outputs
-        consolidated_objects = direct_items + unaligned_items + ambiguous_items
+        # Consolidate Stage 1, Stage 2, and Stage 3 outputs
+        consolidated_objects = direct_items + db_items + unaligned_items + ambiguous_items
 
         logger.info(
             f"Proposal generated successfully for pipelineId {pipeline_id}: "
-            f"{len(consolidated_objects)} objects processed."
+            f"{len(consolidated_objects)} objects processed "
+            f"({len(direct_items)} direct, {len(db_items)} db matched, "
+            f"{len(unaligned_items) + len(ambiguous_items)} AI evaluated)."
         )
 
         return AlignmentProposal(
@@ -107,6 +127,94 @@ class GenerateAlignmentProposalUseCaseImpl(GenerateAlignmentProposalUseCase):
     # -------------------------------------------------------------------------
     # Specialized Private Methods (Single Responsibility Principle)
     # -------------------------------------------------------------------------
+
+    async def _process_database_matches(
+        self,
+        ambiguous_entities: List[AmbiguousEntityItem],
+        user_id: str
+    ) -> Tuple[List[AlignedItem], List[AmbiguousEntityItem], Set[str]]:
+        """
+        STAGE 2: Intermediate deterministic resolution against BiopatternsG knowledge base.
+        For each ambiguous entity, queries /search-by-synonym/{synonym} using expertObjectName.
+        If the first returned biological object has a synonym (or symbol) matching any candidate in alternative_ids:
+        - Resolves as RESOLVED_BY_DATABASE.
+        - Provides reason citing BiopatternsG database with HGNC and UniProt IDs (if available).
+        - Sets pubmedIds to [].
+        """
+        resolved_items: List[AlignedItem] = []
+        unresolved_ambiguous: List[AmbiguousEntityItem] = []
+        processed: Set[str] = set()
+
+        logger.info(
+            f"[STAGE 2] Evaluating {len(ambiguous_entities)} ambiguous entities against "
+            f"BiopatternsG database (search-biological-objects)"
+        )
+
+        for amb in ambiguous_entities:
+            expert_name = amb.expert_object_name.strip()
+            if not expert_name:
+                unresolved_ambiguous.append(amb)
+                continue
+
+            try:
+                bio_objects = await self.biological_objects_port.search_by_synonym(
+                    synonym=expert_name,
+                    user_id=user_id
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Error searching biological objects for synonym '{expert_name}': {str(e)}. "
+                    "Entity will proceed to AI stage."
+                )
+                bio_objects = []
+
+            matched_alternative: Optional[str] = None
+            matched_obj: Optional[BiologicalObjectDomain] = None
+
+            if bio_objects:
+                # Take only the first element as specified by business requirements
+                first_obj = bio_objects[0]
+                
+                # Build search set: all synonyms plus the official symbol
+                candidates_in_db = {s.strip().upper() for s in first_obj.synonyms if s and s.strip()}
+                if first_obj.symbol and first_obj.symbol.strip():
+                    candidates_in_db.add(first_obj.symbol.strip().upper())
+
+                # Check if any proposed alternative matches candidates in the DB object
+                for alt in amb.alternative_ids:
+                    alt_clean = alt.strip()
+                    if alt_clean.upper() in candidates_in_db:
+                        matched_alternative = alt_clean
+                        matched_obj = first_obj
+                        break
+
+            if matched_alternative and matched_obj:
+                # Build informative rationale including HGNC and UniProt identifiers if available
+                id_tokens = []
+                if matched_obj.hgnc_id and matched_obj.hgnc_id.strip():
+                    id_tokens.append(f"HGNC: {matched_obj.hgnc_id.strip()}")
+                if matched_obj.uniprot_id and matched_obj.uniprot_id.strip():
+                    id_tokens.append(f"UniProt: {matched_obj.uniprot_id.strip()}")
+
+                if id_tokens:
+                    reason_str = f"Selected from BiopatternsG database ({', '.join(id_tokens)})"
+                else:
+                    reason_str = "Selected from BiopatternsG database"
+
+                resolved_items.append(
+                    AlignedItem(
+                        current=expert_name,
+                        aligned=matched_alternative,
+                        status=AlignmentStatus.RESOLVED_BY_DATABASE,
+                        reason=reason_str,
+                        pubmed_ids=[]
+                    )
+                )
+                processed.add(expert_name.upper())
+            else:
+                unresolved_ambiguous.append(amb)
+
+        return resolved_items, unresolved_ambiguous, processed
 
     def _process_direct_matches(
         self,

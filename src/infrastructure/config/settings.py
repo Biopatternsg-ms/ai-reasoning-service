@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     pubmed_integration_url: str = "http://pubmed-integration:8080"
     pubmed_timeout_seconds: float = 30.0
 
+    # search-biological-objects (Quarkus service)
+    search_biological_objects_url: str = "http://search-biological-objects:8080"
+    search_biological_objects_timeout_seconds: float = 15.0
+
     # LLM Settings
     llm_provider: str = "gemini"  # "gemini", "deepseek", "nvidia", or "ollama"
     gemini_api_key: Optional[str] = None

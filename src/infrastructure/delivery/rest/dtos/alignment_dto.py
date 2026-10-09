@@ -7,7 +7,7 @@ from src.domain.models.entity import AlignedItem as DomainAlignedItem
 class AlignedItemDTO(BaseModel):
     current: str = Field(..., description="Original biomedical entity identifier")
     aligned: str = Field(..., description="Aligned canonical symbol (or fallback)")
-    status: str = Field(..., description="Classification status: DIRECT_MATCH, RESOLVED_BY_AI, UNRESOLVED")
+    status: str = Field(..., description="Classification status: DIRECT_MATCH, RESOLVED_BY_DATABASE, RESOLVED_BY_AI, UNRESOLVED")
     reason: Optional[str] = Field(None, description="Biological rationale and applied criterion")
     pubmed_ids: List[str] = Field(default_factory=list, alias="pubmedIds", description="Supporting PubMed IDs if evidenced in publications")
 

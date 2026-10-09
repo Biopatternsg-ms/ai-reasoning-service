@@ -65,12 +65,15 @@ class NvidiaAdapter(LLMReasoningPort):
 
         payload["stream"] = True
 
+        logger.info(f"[OUTBOUND HTTP] Calling LLM API at URL: {self.endpoint} (model: '{self.model}')")
+
         async with httpx.AsyncClient(timeout=180.0) as client:
             try:
                 content_chunks = []
                 reasoning_chunks = []
 
                 async with client.stream("POST", self.endpoint, headers=headers, json=payload) as response:
+                    logger.info(f"[OUTBOUND HTTP] LLM API responded with status {response.status_code} for URL: {self.endpoint}")
                     response.raise_for_status()
 
                     async for line in response.aiter_lines():

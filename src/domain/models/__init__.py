@@ -2,6 +2,7 @@ from .entity import AlignmentStatus, AlignedItem
 from .alignment_proposal import AlignmentProposal
 from .pre_alignment import AmbiguousEntityItem, PipelinePreAlignmentData
 from .evidence import KbEventDomain, PublicationEvidence, EntityLiteratureEvidence
+from .biological_object import BiologicalObjectDomain
 
 __all__ = [
     "AlignmentStatus",
@@ -12,4 +13,5 @@ __all__ = [
     "KbEventDomain",
     "PublicationEvidence",
     "EntityLiteratureEvidence",
+    "BiologicalObjectDomain",
 ]

@@ -4,14 +4,20 @@ from unittest.mock import AsyncMock
 from src.application.use_cases.impl.alignment_use_case_impl import GenerateAlignmentProposalUseCaseImpl
 from src.domain.models.pre_alignment import PipelinePreAlignmentData, AmbiguousEntityItem
 from src.domain.models.entity import AlignmentStatus
+from src.domain.models.biological_object import BiologicalObjectDomain
 from src.domain.exceptions.exceptions import EntityValidationException
 
 
 @pytest.mark.asyncio
 async def test_use_case_validation():
     mock_pubmed = AsyncMock()
+    mock_bio_objects = AsyncMock()
     mock_llm = AsyncMock()
-    use_case = GenerateAlignmentProposalUseCaseImpl(pubmed_port=mock_pubmed, llm_port=mock_llm)
+    use_case = GenerateAlignmentProposalUseCaseImpl(
+        pubmed_port=mock_pubmed,
+        biological_objects_port=mock_bio_objects,
+        llm_port=mock_llm
+    )
 
     with pytest.raises(EntityValidationException):
         await use_case.execute(pipeline_id="", user_id="user1")
@@ -23,6 +29,8 @@ async def test_use_case_validation():
 @pytest.mark.asyncio
 async def test_use_case_execution_with_llm_and_direct_matches():
     mock_pubmed = AsyncMock()
+    mock_bio_objects = AsyncMock()
+    mock_bio_objects.search_by_synonym.return_value = []
     mock_llm = AsyncMock()
 
     # Pre-alignment input:
@@ -66,7 +74,11 @@ async def test_use_case_execution_with_llm_and_direct_matches():
         ]
     }
 
-    use_case = GenerateAlignmentProposalUseCaseImpl(pubmed_port=mock_pubmed, llm_port=mock_llm)
+    use_case = GenerateAlignmentProposalUseCaseImpl(
+        pubmed_port=mock_pubmed,
+        biological_objects_port=mock_bio_objects,
+        llm_port=mock_llm
+    )
     proposal = await use_case.execute(pipeline_id="test-pipeline", user_id="user-xyz")
 
     assert proposal.pipeline_id == "test-pipeline"
@@ -83,13 +95,13 @@ async def test_use_case_execution_with_llm_and_direct_matches():
     assert sos_item.status == AlignmentStatus.DIRECT_MATCH
     assert "Exact match found within candidate synonyms list" in sos_item.reason
 
-    # 3. Resolved by AI (no_aligned) -> Stage 2
+    # 3. Resolved by AI (no_aligned) -> Stage 3
     tata_item = next(o for o in proposal.objects if o.current == "TATA")
     assert tata_item.aligned == "TBP"
     assert tata_item.status == AlignmentStatus.RESOLVED_BY_AI
     assert "[Criterion: canonical_gene_mapping]" in tata_item.reason
 
-    # 4. Resolved by AI with justification (aligned_as without direct match) -> Stage 2
+    # 4. Resolved by AI with justification (aligned_as without direct match) -> Stage 3
     aml1_item = next(o for o in proposal.objects if o.current == "AML1")
     assert aml1_item.aligned == "RUNX1"
     assert aml1_item.status == AlignmentStatus.RESOLVED_BY_AI
@@ -97,10 +109,68 @@ async def test_use_case_execution_with_llm_and_direct_matches():
 
 
 @pytest.mark.asyncio
+async def test_use_case_stage_2_database_match():
+    """
+    STAGE 2: Verifies that an ambiguous entity without exact match in Stage 1
+    is matched against search-biological-objects database, citing HGNC and UniProt,
+    without invoking the LLM.
+    """
+    mock_pubmed = AsyncMock()
+    mock_bio_objects = AsyncMock()
+    mock_llm = AsyncMock()
+
+    mock_pubmed.get_aligned_results.return_value = PipelinePreAlignmentData(
+        pipeline_id="pipe-db-1",
+        aligned=[],
+        no_aligned=[],
+        aligned_as=[
+            AmbiguousEntityItem(
+                expert_object_name="TATA",
+                alternative_ids=["TBP", "XYZ1"]
+            )
+        ]
+    )
+
+    # Biological objects returns a match where synonyms include 'TBP'
+    mock_bio_objects.search_by_synonym.return_value = [
+        BiologicalObjectDomain(
+            id="obj-123",
+            name="TATA-box binding protein",
+            symbol="TBP",
+            hgnc_id="HGNC:11588",
+            uniprot_id="P20226",
+            synonyms=["GTF2D", "GTF2D1", "TBP"]
+        )
+    ]
+
+    use_case = GenerateAlignmentProposalUseCaseImpl(
+        pubmed_port=mock_pubmed,
+        biological_objects_port=mock_bio_objects,
+        llm_port=mock_llm
+    )
+    proposal = await use_case.execute(pipeline_id="pipe-db-1", user_id="user-xyz")
+
+    assert len(proposal.objects) == 1
+    item = proposal.objects[0]
+    assert item.current == "TATA"
+    assert item.aligned == "TBP"
+    assert item.status == AlignmentStatus.RESOLVED_BY_DATABASE
+    assert "BiopatternsG database" in item.reason
+    assert "HGNC: HGNC:11588" in item.reason
+    assert "UniProt: P20226" in item.reason
+    assert item.pubmed_ids == []
+
+    # LLM must NOT be called for this entity!
+    mock_llm.generate_json.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_use_case_with_literature_evidence():
     from src.domain.models.evidence import KbEventDomain, PublicationEvidence
 
     mock_pubmed = AsyncMock()
+    mock_bio_objects = AsyncMock()
+    mock_bio_objects.search_by_synonym.return_value = []
     mock_llm = AsyncMock()
 
     mock_pubmed.get_aligned_results.return_value = PipelinePreAlignmentData(
@@ -128,7 +198,11 @@ async def test_use_case_with_literature_evidence():
         ]
     }
 
-    use_case = GenerateAlignmentProposalUseCaseImpl(pubmed_port=mock_pubmed, llm_port=mock_llm)
+    use_case = GenerateAlignmentProposalUseCaseImpl(
+        pubmed_port=mock_pubmed,
+        biological_objects_port=mock_bio_objects,
+        llm_port=mock_llm
+    )
     proposal = await use_case.execute(pipeline_id="pipe-lit-1", user_id="user-xyz")
 
     assert len(proposal.objects) == 1
@@ -143,6 +217,8 @@ async def test_use_case_with_literature_evidence():
 @pytest.mark.asyncio
 async def test_use_case_with_pretrained_knowledge_no_pubmed_ids():
     mock_pubmed = AsyncMock()
+    mock_bio_objects = AsyncMock()
+    mock_bio_objects.search_by_synonym.return_value = []
     mock_llm = AsyncMock()
 
     mock_pubmed.get_aligned_results.return_value = PipelinePreAlignmentData(
@@ -168,7 +244,11 @@ async def test_use_case_with_pretrained_knowledge_no_pubmed_ids():
         ]
     }
 
-    use_case = GenerateAlignmentProposalUseCaseImpl(pubmed_port=mock_pubmed, llm_port=mock_llm)
+    use_case = GenerateAlignmentProposalUseCaseImpl(
+        pubmed_port=mock_pubmed,
+        biological_objects_port=mock_bio_objects,
+        llm_port=mock_llm
+    )
     proposal = await use_case.execute(pipeline_id="pipe-pretrain-1", user_id="user-xyz")
 
     assert len(proposal.objects) == 1
@@ -183,6 +263,8 @@ async def test_use_case_with_pretrained_knowledge_no_pubmed_ids():
 @pytest.mark.asyncio
 async def test_use_case_fallback_when_llm_fails():
     mock_pubmed = AsyncMock()
+    mock_bio_objects = AsyncMock()
+    mock_bio_objects.search_by_synonym.return_value = []
     mock_llm = AsyncMock()
 
     mock_pubmed.get_aligned_results.return_value = PipelinePreAlignmentData(
@@ -200,7 +282,11 @@ async def test_use_case_fallback_when_llm_fails():
     # LLM throws an exception (e.g. timeout / network error)
     mock_llm.generate_json.side_effect = Exception("LLM connection timeout")
 
-    use_case = GenerateAlignmentProposalUseCaseImpl(pubmed_port=mock_pubmed, llm_port=mock_llm)
+    use_case = GenerateAlignmentProposalUseCaseImpl(
+        pubmed_port=mock_pubmed,
+        biological_objects_port=mock_bio_objects,
+        llm_port=mock_llm
+    )
     proposal = await use_case.execute(pipeline_id="test-pipeline-fallback", user_id="user-xyz")
 
     assert proposal.pipeline_id == "test-pipeline-fallback"

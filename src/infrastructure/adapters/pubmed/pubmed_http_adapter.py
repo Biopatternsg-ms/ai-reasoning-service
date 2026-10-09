@@ -26,19 +26,20 @@ class PubMedHttpAdapter(PubMedDataPort):
         Forwarding the mandatory 'x-user-id' header.
         """
         url = f"{self.base_url}/pubmed/aligned-results/{pipeline_id}"
-        logger.info(f"Querying pubmed-integration at: {url} with x-user-id: {user_id}")
+        logger.info(f"[OUTBOUND HTTP] Calling pubmed-integration at URL: {url} with x-user-id: {user_id}")
 
         headers = {"x-user-id": user_id}
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
                 response = await client.get(url, headers=headers)
+                logger.info(f"[OUTBOUND HTTP] pubmed-integration responded with status {response.status_code} for URL: {url}")
                 response.raise_for_status()
                 data = response.json()
                 dto = AlignedResultPubMedDTO.model_validate(data)
                 return dto.to_domain()
             except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error {e.response.status_code} querying pubmed-integration: {e.response.text}")
+                logger.error(f"HTTP error {e.response.status_code} querying pubmed-integration ({url}): {e.response.text}")
                 raise
             except httpx.RequestError as e:
                 logger.error(f"Connection error with pubmed-integration ({url}): {str(e)}")
@@ -52,13 +53,14 @@ class PubMedHttpAdapter(PubMedDataPort):
         import urllib.parse
         encoded_term = urllib.parse.quote(term.strip())
         url = f"{self.base_url}/pubmed/kb-events/{pipeline_id}/by-term/{encoded_term}"
-        logger.info(f"Querying kb-events for term '{term}' at: {url}")
+        logger.info(f"[OUTBOUND HTTP] Calling pubmed-integration (kb-events) at URL: {url}")
 
         headers = {"x-user-id": user_id}
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
                 response = await client.get(url, headers=headers)
+                logger.info(f"[OUTBOUND HTTP] pubmed-integration (kb-events) responded with status {response.status_code} for URL: {url}")
                 if response.status_code == 404:
                     return []
                 response.raise_for_status()
@@ -91,7 +93,7 @@ class PubMedHttpAdapter(PubMedDataPort):
             return []
 
         url = f"{self.base_url}/pubmed/publications/by-pmids"
-        logger.info(f"Querying publications for {len(pmids)} PMIDs at: {url}")
+        logger.info(f"[OUTBOUND HTTP] Calling pubmed-integration (publications) at URL: {url} (count: {len(pmids)})")
 
         headers = {"x-user-id": user_id}
         payload = {"pmids": pmids}
@@ -99,6 +101,7 @@ class PubMedHttpAdapter(PubMedDataPort):
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
                 response = await client.post(url, json=payload, headers=headers)
+                logger.info(f"[OUTBOUND HTTP] pubmed-integration (publications) responded with status {response.status_code} for URL: {url}")
                 response.raise_for_status()
                 data = response.json()
                 from src.domain.models.evidence import PublicationEvidence

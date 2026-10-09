@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class AlignmentStatus(str, Enum):
     DIRECT_MATCH = "DIRECT_MATCH"
+    RESOLVED_BY_DATABASE = "RESOLVED_BY_DATABASE"
     RESOLVED_BY_AI = "RESOLVED_BY_AI"
     UNRESOLVED = "UNRESOLVED"
 
