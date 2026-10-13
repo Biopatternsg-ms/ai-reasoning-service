@@ -9,8 +9,8 @@ pipeline {
         )
         string(
             name: 'LLM_MODEL_NAME',
-            defaultValue: 'gemini-2.5-flash-lite',
-            description: 'Nombre del modelo para el proveedor LLM (ej. gemini-2.5-flash-lite, deepseek-chat)'
+            defaultValue: 'gemini-3.5-flash-lite',
+            description: 'Nombre del modelo para el proveedor LLM (ej. gemini-3.5-flash-lite, deepseek-chat)'
         )
         string(
             name: 'GEMINI_CREDENTIALS_ID',
