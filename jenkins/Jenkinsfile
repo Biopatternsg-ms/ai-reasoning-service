@@ -19,7 +19,7 @@ pipeline {
         )
         string(
             name: 'APP_PORT',
-            defaultValue: '8008',
+            defaultValue: '8009',
             description: 'Puerto host donde se publicará el servicio'
         )
         string(
@@ -37,7 +37,7 @@ pipeline {
     environment {
         CONTAINER_NAME = "${env.JOB_NAME.toLowerCase().replaceAll('[^a-z0-9-]', '-').replaceAll('^[^a-z0-9]+|[^a-z0-9]+$', '')}"
         NETWORK = 'general-network'
-        PORT = "${params.APP_PORT ?: '8008'}"
+        PORT = "${params.APP_PORT ?: '8009'}"
     }
 
     stages {
@@ -79,7 +79,7 @@ pipeline {
                             -e BIOLOGICAL_OBJECTS_URL='${params.BIOLOGICAL_OBJECTS_URL}' \\
                             -e LLM_PROVIDER='${params.LLM_PROVIDER}' \\
                             -e LLM_MODEL_NAME='${params.LLM_MODEL_NAME}' \\
-                            -e GEMINI_API_KEY='${GEMINI_SECRET}' \\
+                            -e GEMINI_API_KEY=\"\${GEMINI_SECRET}\" \\
                             ${imageName}
                         """
 
