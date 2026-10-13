@@ -149,10 +149,16 @@ docker build -t ai-reasoning-service:test .
 docker run --rm -v "$PWD/tests:/app/tests:ro" --entrypoint pytest ai-reasoning-service:test tests/ -v -p no:cacheprovider
 ```
 
----
+## 9. Development Rules & Architectural Guardrails
 
-## 9. Conventions for Future Agent Contributions
-1. **Never put business logic in controllers or ports**: Keep delivery mechanisms thin.
-2. **Follow SRP in `src/application/services/`**: If a new resolution strategy or algorithm is added, encapsulate it in a dedicated service class inside `src/application/services/<context>/`.
-3. **Keep `use_case_impl.py` as an orchestrator**: The use case should only coordinate services, not execute low-level parsing or API requests directly.
-4. **Preserve backward compatibility**: Ensure all 16 existing tests pass before pushing any modifications.
+All developers and autonomous AI agents **must follow the mandatory architectural and coding rules** defined in:
+
+👉 **[📘 RULES.md](RULES.md)**
+
+### Key Highlights from RULES.md:
+- **Use Cases as Orchestrators**: Must remain thin (~50–100 lines), only coordinating domain services.
+- **Services by Context**: All complex domain logic belongs in `src/application/services/<context>/`.
+- **Inbound Security**: The `x-user-id` header must be validated via `HeadersInterceptor`.
+- **Dependency Injection**: Centralized wiring in `src/infrastructure/container.py`.
+- **Testing**: Zero regressions, 100% pass rate before PR merging.
+

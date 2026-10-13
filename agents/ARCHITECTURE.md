@@ -88,12 +88,27 @@ Layer: Infrastructure Adapters (src/infrastructure/adapters)
 
 ## 4. How to Extend This Service
 
-### Adding a New Resolution Stage / Service
+### Architecture Rule: Orchestrator vs Domain Services
+- **`use_cases/impl/<name>_use_case_impl.py`**: Must strictly be an **orchestrator** (~50-100 LOC). It validates input arguments and coordinates service calls. It does NOT implement calculations, direct regex parsing, or prompt assembly.
+- **`services/<context>/<service_name>.py`**: Encapsulates specific domain algorithms, deterministic lookups, API transformations, or LLM interactions.
+
+### Adding a New Use Case
+1. **Create context directory**: `src/application/services/<new_context>/`.
+2. **Implement services**: Create granular classes following SRP in that directory and export them in `__init__.py`.
+3. **Define use case**:
+   - Port: `src/application/use_cases/<new_use_case>_use_case.py`.
+   - Implementation: `src/application/use_cases/impl/<new_use_case>_use_case_impl.py` (receives services in `__init__`, calls them in `execute`).
+4. **Wire dependencies**: Instantiate services and use case in `src/infrastructure/container.py`.
+5. **Create delivery layer**: Controller and DTOs under `src/infrastructure/delivery/rest/`.
+6. **Register route**: In `src/main.py`.
+7. **Document**: Add `agents/use_cases/<NEW_USE_CASE>.md`.
+
+### Adding a New Service into an Existing Context
 1. Create a new service file under `src/application/services/<context>/`.
 2. Follow SRP: The class should only focus on its specific strategy.
 3. Export the class in `src/application/services/<context>/__init__.py`.
 4. Inject it into `Container` in `src/infrastructure/container.py`.
-5. Call it within `GenerateAlignmentProposalUseCaseImpl.execute`.
+5. Call it within the use case orchestrator.
 6. Add unit tests under `tests/unit/application/services/<context>/`.
 
 ### Adding a New LLM Provider
