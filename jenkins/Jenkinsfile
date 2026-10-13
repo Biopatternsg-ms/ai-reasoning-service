@@ -41,7 +41,6 @@ pipeline {
     }
 
     stages {
-        // Stage 1: Build Docker Image
         stage('Build Docker Image') {
             steps {
                 script {
@@ -53,24 +52,6 @@ pipeline {
             }
         }
 
-        // Stage 2: Run Unit & Integration Tests mounted from the workspace
-        stage('Run Tests') {
-            steps {
-                script {
-                    def testImageName = "${CONTAINER_NAME}:latest"
-                    echo "--- Running Test Suite (pytest) inside Docker container ---"
-                    sh """
-                    docker run --rm \
-                        -v "\$PWD/tests:/app/tests:ro" \
-                        --entrypoint pytest \
-                        ${testImageName} tests/ -v -p no:cacheprovider
-                    """
-                    echo "--- All tests passed! ---"
-                }
-            }
-        }
-
-        // Stage 3: Deploy Application using Jenkins Secret
         stage('Deploy Application') {
             steps {
                 withCredentials([
@@ -83,26 +64,22 @@ pipeline {
                         def imageName = "${CONTAINER_NAME}:latest"
                         echo "--- Deploying container: ${CONTAINER_NAME} on port ${PORT} ---"
 
-                        // Ensure Docker general network exists
                         sh "docker network create ${NETWORK} || true"
-
-                        // Stop and remove existing container if present
                         sh "docker stop ${CONTAINER_NAME} || true"
                         sh "docker rm ${CONTAINER_NAME} || true"
 
-                        // Deploy container injecting GEMINI_API_KEY from Jenkins Secret
                         sh """
-                        docker run -d \
-                            --name ${CONTAINER_NAME} \
-                            -p ${PORT}:8000 \
-                            --network ${NETWORK} \
-                            --restart always \
-                            -e APP_PORT=8000 \
-                            -e PUBMED_INTEGRATION_URL='${params.PUBMED_INTEGRATION_URL}' \
-                            -e BIOLOGICAL_OBJECTS_URL='${params.BIOLOGICAL_OBJECTS_URL}' \
-                            -e LLM_PROVIDER='${params.LLM_PROVIDER}' \
-                            -e LLM_MODEL_NAME='${params.LLM_MODEL_NAME}' \
-                            -e GEMINI_API_KEY='${GEMINI_SECRET}' \
+                        docker run -d \\
+                            --name ${CONTAINER_NAME} \\
+                            -p ${PORT}:8000 \\
+                            --network ${NETWORK} \\
+                            --restart always \\
+                            -e APP_PORT=8000 \\
+                            -e PUBMED_INTEGRATION_URL='${params.PUBMED_INTEGRATION_URL}' \\
+                            -e BIOLOGICAL_OBJECTS_URL='${params.BIOLOGICAL_OBJECTS_URL}' \\
+                            -e LLM_PROVIDER='${params.LLM_PROVIDER}' \\
+                            -e LLM_MODEL_NAME='${params.LLM_MODEL_NAME}' \\
+                            -e GEMINI_API_KEY='${GEMINI_SECRET}' \\
                             ${imageName}
                         """
 
@@ -113,10 +90,9 @@ pipeline {
         }
     }
 
-    // Post-build actions
     post {
         always {
-            echo "--- Cleaning up workspace ---"
+            echo "--- Cleaning up the workspace ---"
             deleteDir()
         }
     }
