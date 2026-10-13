@@ -63,7 +63,7 @@ pipeline {
                     docker run --rm \
                         -v "\$PWD/tests:/app/tests:ro" \
                         --entrypoint pytest \
-                        ${testImageName} tests/ -v
+                        ${testImageName} tests/ -v -p no:cacheprovider
                     """
                     echo "--- All tests passed! ---"
                 }
