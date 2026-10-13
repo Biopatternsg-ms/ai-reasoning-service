@@ -28,16 +28,14 @@ async def generate_alignment_proposal(
 ) -> AlignmentProposalResponseDTO:
     """
     Endpoint generating the biological entity alignment proposal:
-    - Validates the presence of the 'x-user-id' header.
+    - Validates pipelineId path parameter.
+    - Receives validated 'x-user-id' from the inbound interceptor.
     - Queries pubmed-integration forwarding 'x-user-id'.
     - Uses AI to resolve ambiguous and unaligned entities.
     - Returns the consolidated list for user verification in the UI.
     """
     if not pipelineId or not pipelineId.strip():
         raise HTTPException(status_code=400, detail="Path parameter 'pipelineId' is required.")
-
-    if not x_user_id or not x_user_id.strip():
-        raise HTTPException(status_code=400, detail="Header 'x-user-id' is required.")
 
     try:
         domain_proposal = await use_case.execute(

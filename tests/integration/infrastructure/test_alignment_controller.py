@@ -23,7 +23,8 @@ def test_health_check(client):
 
 def test_missing_x_user_id_header(client):
     response = client.post("/ai-reasoning/alignments/v1/proposal/test-pipe-1")
-    assert response.status_code == 422  # Missing mandatory header
+    assert response.status_code == 400  # Intercepted by HeadersInterceptor
+    assert response.json()["detail"] == "Header 'x-user-id' is required."
 
 
 def test_successful_alignment_proposal_flow(client, monkeypatch):
@@ -41,7 +42,15 @@ def test_successful_alignment_proposal_flow(client, monkeypatch):
                 current="TATA",
                 aligned="TBP",
                 status=AlignmentStatus.RESOLVED_BY_AI,
-                reason="TATA-binding protein [Criterion: canonical_gene_mapping]"
+                reason="TATA-binding protein [Criterion: canonical_gene_mapping]",
+                pubmed_ids=["10523821"]
+            ),
+            AlignedItem(
+                current="AMBIG1",
+                aligned="GENE_A",
+                status=AlignmentStatus.RESOLVED_BY_DATABASE,
+                reason="Selected from BiopatternsG database (HGNC: 1234, UniProt: P99999)",
+                pubmed_ids=[]
             )
         ]
     )
@@ -56,9 +65,15 @@ def test_successful_alignment_proposal_flow(client, monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["pipelineId"] == "pipe-100"
-    assert len(data["objects"]) == 2
+    assert len(data["objects"]) == 3
     assert data["objects"][0]["current"] == "SST"
     assert data["objects"][0]["status"] == "DIRECT_MATCH"
+    assert data["objects"][0]["pubmedIds"] == []
     assert data["objects"][1]["current"] == "TATA"
     assert data["objects"][1]["aligned"] == "TBP"
     assert data["objects"][1]["status"] == "RESOLVED_BY_AI"
+    assert data["objects"][1]["pubmedIds"] == ["10523821"]
+    assert data["objects"][2]["current"] == "AMBIG1"
+    assert data["objects"][2]["aligned"] == "GENE_A"
+    assert data["objects"][2]["status"] == "RESOLVED_BY_DATABASE"
+    assert data["objects"][2]["pubmedIds"] == []

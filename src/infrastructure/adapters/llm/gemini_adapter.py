@@ -48,9 +48,12 @@ class GeminiAdapter(LLMReasoningPort):
             }
         }
 
+        logger.info(f"[OUTBOUND HTTP] Calling Gemini API at URL: {self.endpoint} (model: '{self.model}')")
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             try:
                 response = await client.post(url, json=payload)
+                logger.info(f"[OUTBOUND HTTP] Gemini API responded with status {response.status_code}")
                 response.raise_for_status()
                 data = response.json()
 
@@ -58,8 +61,16 @@ class GeminiAdapter(LLMReasoningPort):
                 if not candidates:
                     raise ValueError("Gemini returned no response candidates.")
 
-                raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
-                return json.loads(raw_text)
+                raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "{}").strip()
+                
+                # Strip markdown fences if present
+                cleaned_text = raw_text
+                if cleaned_text.startswith("```"):
+                    import re
+                    cleaned_text = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned_text)
+                    cleaned_text = re.sub(r"\n?```$", "", cleaned_text).strip()
+
+                return json.loads(cleaned_text)
 
             except httpx.HTTPStatusError as e:
                 logger.error(f"HTTP error from Gemini API ({e.response.status_code}): {e.response.text}")

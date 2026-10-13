@@ -34,3 +34,19 @@ class AlignedResultPubMedDTO(BaseModel):
             no_aligned=self.no_aligned,
             aligned_as=[item.to_domain() for item in self.aligned_as]
         )
+
+
+class KbEventResponseDTO(BaseModel):
+    first: str
+    relation: str
+    second: str
+    pubmed_ids: List[str] = Field(default_factory=list, alias="pubmedIds")
+
+    class Config:
+        populate_by_name = True
+
+
+class PublicationResponseDTO(BaseModel):
+    pmid: str
+    title: str = ""
+    text: str = ""

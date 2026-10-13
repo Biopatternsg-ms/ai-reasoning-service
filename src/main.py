@@ -2,6 +2,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.infrastructure.config.settings import settings
+from src.infrastructure.config.interceptors import HeadersInterceptor
 from src.infrastructure.delivery.rest.controllers import alignment_router, health_router
 
 # Basic logging setup
@@ -27,6 +28,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Interceptor: Inbound headers validation (e.g. x-user-id)
+app.add_middleware(HeadersInterceptor)
 
 # Register routers from infrastructure.delivery.rest
 app.include_router(alignment_router)
