@@ -67,47 +67,23 @@ src/
 
 ---
 
-## 3. The 3-Stage Alignment Pipeline Workflow
+## 3. Supported Use Cases
 
-When a request is received at `POST /ai-reasoning/alignments/v1/proposal/{pipelineId}`:
+This microservice is built to host multiple AI reasoning use cases. Each use case is encapsulated in its own orchestrator under `src/application/use_cases/` and supported by specialized domain services under `src/application/services/<context>/`.
 
-```mermaid
-graph TD
-    A[Inbound Request + x-user-id] --> B[HeadersInterceptor]
-    B --> C[AlignmentController]
-    C --> D[GenerateAlignmentProposalUseCase]
-    D --> E[Fetch Pre-Alignment Data from pubmed-integration]
-    E --> F[STAGE 1: DirectMatchingService]
-    F -->|Exact matches| G[DIRECT_MATCH]
-    F -->|Pending ambiguous| H[STAGE 2: DatabaseMatchingService]
-    H -->|Match in search-biological-objects| I[RESOLVED_BY_DATABASE]
-    H -->|Pending ambiguous + unaligned| J[STAGE 3: LiteratureEvidenceService]
-    J -->|KB Events & PubMed Abstracts| K[STAGE 3: AIResolutionService]
-    K -->|Prompt + LLM Inference| L[RESOLVED_BY_AI / UNRESOLVED]
-    G & I & L --> M[Consolidate AlignmentProposal]
-    M --> C
-    C --> N[Return AlignmentProposalResponseDTO]
-```
+Detailed documentation for each use case is available in dedicated guides:
 
-### Stage 1: Deterministic Direct Matching (`DirectMatchingService`)
-- Evaluates entities already classified in `aligned`.
-- Evaluates entities in `aligned_as` whose symbol exactly matches one of the candidate synonyms (case-insensitive).
-- **Cost**: 0 LLM tokens, instantaneous.
-- **Status**: `DIRECT_MATCH`.
+| Use Case | Route | Status | Detailed Specification |
+|---|---|---|---|
+| **Biological Entity Alignment** | `POST /ai-reasoning/alignments/v1/proposal/{pipelineId}` | Active (3-Stage Hybrid) | [📘 ALIGNMENT_PROPOSAL.md](use_cases/ALIGNMENT_PROPOSAL.md) |
 
-### Stage 2: Database Matching (`DatabaseMatchingService`)
-- Queries `search-biological-objects` via `GET /search-by-synonym/{synonym}`.
-- If the first biological object has synonyms or official symbols matching any candidate in `alternative_ids`:
-  - Resolves immediately citing the BiopatternsG database with HGNC and UniProt identifiers.
-- **Cost**: 0 LLM tokens.
-- **Status**: `RESOLVED_BY_DATABASE`.
+### Quick Summary: Biological Entity Alignment Proposal
+The alignment use case resolves ambiguous and unaligned biomedical entities across 3 stages:
+1. **Stage 1 (Direct Match)**: Local exact matching against official synonyms (Zero LLM cost).
+2. **Stage 2 (Database Match)**: Knowledge base matching against `search-biological-objects` (HGNC/UniProt IDs).
+3. **Stage 3 (AI Resolution)**: Multi-model LLM reasoning using PubMed publication abstracts and interaction events.
 
-### Stage 3: AI-Assisted Resolution with Literature Evidence (`LiteratureEvidenceService` & `AIResolutionService`)
-- Collects interaction events and abstracts from PubMed for unresolved terms without ID truncation.
-- Builds a scientific micro-prompt citing literature context.
-- Invokes the configured LLM provider (`gemini`, `deepseek`, `nvidia`, `ollama`) expecting structured JSON output.
-- Formats justification with scientific criterion (e.g. `[Criterion: canonical_gene_mapping]`).
-- **Status**: `RESOLVED_BY_AI` or `UNRESOLVED` (safe fallback preserving original term if unresolvable).
+👉 *For full sequence diagrams, DTO contracts, fallback algorithms, and testing strategies, see [`agents/use_cases/ALIGNMENT_PROPOSAL.md`](use_cases/ALIGNMENT_PROPOSAL.md).*
 
 ---
 
