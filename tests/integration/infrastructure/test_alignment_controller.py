@@ -23,7 +23,8 @@ def test_health_check(client):
 
 def test_missing_x_user_id_header(client):
     response = client.post("/ai-reasoning/alignments/v1/proposal/test-pipe-1")
-    assert response.status_code == 422  # Missing mandatory header
+    assert response.status_code == 400  # Intercepted by HeadersInterceptor
+    assert response.json()["detail"] == "Header 'x-user-id' is required."
 
 
 def test_successful_alignment_proposal_flow(client, monkeypatch):
