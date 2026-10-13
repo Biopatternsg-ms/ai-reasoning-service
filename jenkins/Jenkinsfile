@@ -1,0 +1,123 @@
+pipeline {
+    agent any
+
+    parameters {
+        choice(
+            name: 'LLM_PROVIDER',
+            choices: ['gemini', 'deepseek', 'nvidia', 'ollama'],
+            description: 'Proveedor de LLM para el razonamiento de alineamiento biológico'
+        )
+        string(
+            name: 'LLM_MODEL_NAME',
+            defaultValue: 'gemini-2.5-flash-lite',
+            description: 'Nombre del modelo para el proveedor LLM (ej. gemini-2.5-flash-lite, deepseek-chat)'
+        )
+        string(
+            name: 'GEMINI_CREDENTIALS_ID',
+            defaultValue: 'gemini-api-key',
+            description: 'ID del Secret en Jenkins (Secret text) que contiene el GEMINI_API_KEY'
+        )
+        string(
+            name: 'APP_PORT',
+            defaultValue: '8008',
+            description: 'Puerto host donde se publicará el servicio'
+        )
+        string(
+            name: 'PUBMED_INTEGRATION_URL',
+            defaultValue: 'http://pubmed-integration:8080',
+            description: 'URL interna del servicio pubmed-integration'
+        )
+        string(
+            name: 'BIOLOGICAL_OBJECTS_URL',
+            defaultValue: 'http://biological-objects:8080',
+            description: 'URL interna del servicio search-biological-objects'
+        )
+    }
+
+    environment {
+        CONTAINER_NAME = "${env.JOB_NAME.toLowerCase().replaceAll('[^a-z0-9-]', '-').replaceAll('^[^a-z0-9]+|[^a-z0-9]+$', '')}"
+        NETWORK = 'general-network'
+        PORT = "${params.APP_PORT ?: '8008'}"
+    }
+
+    stages {
+        // Stage 1: Build Docker Image
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    def localImageName = "${CONTAINER_NAME}:latest"
+                    echo "--- Building Local Docker Image: ${localImageName} ---"
+                    sh "docker build -t ${localImageName} ."
+                    echo "--- Docker image built successfully! ---"
+                }
+            }
+        }
+
+        // Stage 2: Run Unit & Integration Tests mounted from the workspace
+        stage('Run Tests') {
+            steps {
+                script {
+                    def testImageName = "${CONTAINER_NAME}:latest"
+                    echo "--- Running Test Suite (pytest) inside Docker container ---"
+                    sh """
+                    docker run --rm \
+                        -v "\$PWD/tests:/app/tests:ro" \
+                        --entrypoint pytest \
+                        ${testImageName} tests/ -v
+                    """
+                    echo "--- All tests passed! ---"
+                }
+            }
+        }
+
+        // Stage 3: Deploy Application using Jenkins Secret
+        stage('Deploy Application') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: "${params.GEMINI_CREDENTIALS_ID ?: 'gemini-api-key'}",
+                        variable: 'GEMINI_SECRET'
+                    )
+                ]) {
+                    script {
+                        def imageName = "${CONTAINER_NAME}:latest"
+                        echo "--- Deploying container: ${CONTAINER_NAME} on port ${PORT} ---"
+
+                        // Ensure Docker general network exists
+                        sh "docker network create ${NETWORK} || true"
+
+                        // Stop and remove existing container if present
+                        sh "docker stop ${CONTAINER_NAME} || true"
+                        sh "docker rm ${CONTAINER_NAME} || true"
+
+                        // Deploy container injecting GEMINI_API_KEY from Jenkins Secret
+                        sh """
+                        docker run -d \
+                            --name ${CONTAINER_NAME} \
+                            -p ${PORT}:8000 \
+                            --network ${NETWORK} \
+                            --restart always \
+                            -e APP_PORT=8000 \
+                            -e PUBMED_INTEGRATION_URL='${params.PUBMED_INTEGRATION_URL}' \
+                            -e BIOLOGICAL_OBJECTS_URL='${params.BIOLOGICAL_OBJECTS_URL}' \
+                            -e LLM_PROVIDER='${params.LLM_PROVIDER}' \
+                            -e LLM_MODEL_NAME='${params.LLM_MODEL_NAME}' \
+                            -e GEMINI_API_KEY='${GEMINI_SECRET}' \
+                            ${imageName}
+                        """
+
+                        echo "--- Deployment completed successfully on port ${PORT}! ---"
+                    }
+                }
+            }
+        }
+    }
+
+    // Post-build actions
+    post {
+        always {
+            echo "--- Cleaning up workspace ---"
+            deleteDir()
+        }
+    }
+}

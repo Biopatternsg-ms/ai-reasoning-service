@@ -11,8 +11,14 @@ class Settings(BaseSettings):
     pubmed_timeout_seconds: float = 30.0
 
     # search-biological-objects (Quarkus service)
+    biological_objects_url: Optional[str] = None
     search_biological_objects_url: str = "http://search-biological-objects:8080"
     search_biological_objects_timeout_seconds: float = 15.0
+
+    @property
+    def effective_biological_objects_url(self) -> str:
+        """Returns biological_objects_url if set, otherwise falls back to search_biological_objects_url."""
+        return self.biological_objects_url or self.search_biological_objects_url
 
     # LLM Settings
     llm_provider: str = "gemini"  # "gemini", "deepseek", "nvidia", or "ollama"

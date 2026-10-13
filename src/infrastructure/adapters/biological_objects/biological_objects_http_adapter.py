@@ -17,7 +17,7 @@ class BiologicalObjectsHttpAdapter(BiologicalObjectsPort):
     """
 
     def __init__(self):
-        self.base_url = settings.search_biological_objects_url.rstrip("/")
+        self.base_url = settings.effective_biological_objects_url.rstrip("/")
         self.timeout = settings.search_biological_objects_timeout_seconds
 
     async def search_by_synonym(self, synonym: str, user_id: str) -> List[BiologicalObjectDomain]:
