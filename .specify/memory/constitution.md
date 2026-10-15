@@ -45,6 +45,11 @@ Sync Impact Report:
 - **TDD Coverage**: Context services require isolated unit tests with mock adapters. Controllers require integration tests validating status codes, DTO schemas, and header interception.
 - **CI/CD Compliance**: Changes must pass the automated GitHub workflow checks (CodeQL security analysis, Apache 2.0 license headers, and pytest).
 
+### VII. Living Use Case Documentation & Zero Drift (NON-NEGOTIABLE)
+- **Modifying an Existing Use Case**: Whenever a use case is altered (contract changes, new steps, new inputs/outputs, or revised business logic), its dedicated documentation in `.agents/use_cases/<USE_CASE_NAME>.md` MUST be updated in the same PR/commit.
+- **Creating a New Use Case**: A comprehensive specification document MUST be authored in `.agents/use_cases/<USE_CASE_NAME>.md` (covering goals, DTO contracts, pipeline steps, and fallback behavior) and registered in `.agents/README.md`.
+- **Zero Drift**: Code and documentation must never drift apart. Any task modifying a use case is incomplete without synchronized documentation in `.agents/use_cases/`.
+
 ## Technology Stack & Constraints
 
 - **Language & Runtime**: Python 3.10+
@@ -58,7 +63,7 @@ Sync Impact Report:
 1. **Specification First**: Features and use cases begin with a `spec.md` defining requirements, user stories, and acceptance criteria.
 2. **Technical Plan (`plan.md`)**: Architectural blueprint verified against this Constitution and `.agents/RULES.md`.
 3. **Task Breakdown (`tasks.md`)**: Granular, testable tasks following TDD (tests first, then context services, then use case orchestrator, then controller).
-4. **Execution & Verification**: Autonomous agents execute tasks and verify against acceptance criteria with zero regressions.
+4. **Execution & Verification**: Autonomous agents execute tasks, verify against acceptance criteria, and update `.agents/use_cases/`.
 
 ## Governance
 
@@ -69,4 +74,5 @@ This Constitution supersedes ad-hoc instructions. All PRs, code reviews, and AI 
 
 Amendments to this Constitution require explicit documentation, impact assessment, and review.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-14 | **Last Amended**: 2026-10-14
+**Version**: 1.1.0 | **Ratified**: 2026-10-14 | **Last Amended**: 2026-10-15
+
