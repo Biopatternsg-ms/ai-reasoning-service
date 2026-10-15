@@ -90,15 +90,31 @@ Every pull request or code change must pass the test suite with **zero regressio
 
 ---
 
-## 6. Checklist: Creating a New Use Case
+## 6. Use Case Documentation Rule (`.agents/use_cases/`)
 
-Follow this exact sequence when adding a new capability:
+Living documentation is mandatory and must always stay synchronized with the codebase:
 
-- [ ] **Step 1**: Create `src/application/services/<new_context>/`.
+- **Modifying an Existing Use Case**: Whenever a use case is altered (contract changes, new pipeline steps, modified input/output DTOs, or changed business rules), the corresponding documentation file in `.agents/use_cases/<USE_CASE_NAME>.md` **MUST be updated immediately** in the same pull request or commit.
+- **Creating a New Use Case**: When creating a new use case, a comprehensive specification file **MUST be created** at `.agents/use_cases/<USE_CASE_NAME>.md` detailing:
+  1. Business objective and context.
+  2. Input / Output contracts (DTOs) and endpoints.
+  3. Step-by-step pipeline execution flow (orchestrator vs. context services).
+  4. Error handling and LLM fallback behaviors.
+  5. The new use case must also be registered in the Use Cases table in `.agents/README.md`.
+- **Zero Drift**: Code and documentation must never drift apart. An implementation without up-to-date documentation in `.agents/use_cases/` is considered incomplete.
+
+---
+
+## 7. Checklist: Creating or Modifying a Use Case
+
+Follow this exact sequence when adding or updating a capability:
+
+- [ ] **Step 1**: Create or update `src/application/services/<context>/`.
 - [ ] **Step 2**: Implement granular, single-responsibility service classes inside that folder and export them in `__init__.py`.
-- [ ] **Step 3**: Define the abstract use case port in `src/application/use_cases/<use_case_name>_use_case.py`.
+- [ ] **Step 3**: Define or update the abstract use case port in `src/application/use_cases/<use_case_name>_use_case.py`.
 - [ ] **Step 4**: Implement the thin orchestrator in `src/application/use_cases/impl/<use_case_name>_use_case_impl.py` (receives services in `__init__`, calls them sequentially in `execute`).
 - [ ] **Step 5**: Wire ports, services, and the use case in `src/infrastructure/container.py`.
-- [ ] **Step 6**: Create the REST controller and DTOs in `src/infrastructure/delivery/rest/` and register the router in `src/main.py`.
-- [ ] **Step 7**: Write unit tests for the services and integration tests for the controller.
-- [ ] **Step 8**: Document the use case in `agents/use_cases/<USE_CASE_NAME>.md` and register it in `agents/README.md`.
+- [ ] **Step 6**: Create or update the REST controller and DTOs in `src/infrastructure/delivery/rest/` and register the router in `src/main.py`.
+- [ ] **Step 7**: Write unit tests for the services and integration tests for the controller (all 16+ tests must pass).
+- [ ] **Step 8 (MANDATORY)**: Create or update documentation in `.agents/use_cases/<USE_CASE_NAME>.md` and keep `.agents/README.md` in sync.
+
